@@ -1,0 +1,27 @@
+# Переменные окружения
+.env
+.env.local
+.env.production
+
+# Зависимости
+node_modules/
+
+# Логи
+*.log
+npm-debug.log*
+
+# База данных SQLite
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
