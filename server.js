@@ -7,28 +7,31 @@ const db = require('./db');
 const app = express();
 app.use(express.json());
 
-// CORS с явными настройками
+// CORS
 app.use(cors({
-  origin: '*', // Для отладки. В продакшене укажите ваш домен
+  origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 }));
 
-// Обработка preflight запросов
+// Preflight
 app.options('*', (req, res) => {
   res.sendStatus(200);
 });
 
-// Логирование запросов (для отладки)
+// Логирование
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} from ${req.ip}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
 });
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-if (!BOT_TOKEN) { console.error('❌ Укажите BOT_TOKEN в .env'); process.exit(1); }
+if (!BOT_TOKEN) {
+  console.error('❌ Укажите BOT_TOKEN в .env');
+  process.exit(1);
+}
 
-// 🔐 Верификация initData Telegram
+// Верификация
 function verifyInitData(initData) {
   try {
     const params = new URLSearchParams(initData);
@@ -55,22 +58,19 @@ function getUserData(initData) {
 
 const getTodayUTC = () => new Date().toISOString().split('T')[0];
 
-// 1️⃣ Инициализация / Синхронизация
+// 1️⃣ Verify
 app.post('/api/verify', (req, res) => {
   try {
     const { initData } = req.body;
     if (!verifyInitData(initData)) {
-      console.warn('❌ Invalid initData');
       return res.status(403).json({ error: 'Неверные данные Telegram' });
     }
     
     const user = getUserData(initData);
     if (!user.id) {
-      console.warn('❌ No user ID');
       return res.status(400).json({ error: 'Нет ID пользователя' });
     }
 
-    // Создаём пользователя если нет
     db.prepare('INSERT OR IGNORE INTO users (tg_id, username, balance) VALUES (?, ?, 10000)')
       .run(user.id, user.username || 'Игрок');
     
@@ -81,31 +81,27 @@ app.post('/api/verify', (req, res) => {
     const dbUser = db.prepare('SELECT tg_id, username, balance FROM users WHERE tg_id = ?').get(user.id);
     const scoreRow = db.prepare('SELECT score, wins FROM daily_scores WHERE tg_id = ? AND date = ?').get(user.id, today);
 
-    console.log(`✅ Verify: user ${user.id}`);
     res.json({ user: dbUser, score: scoreRow, date: today });
   } catch (e) {
-    console.error('❌ /api/verify error:', e);
+    console.error('/api/verify error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// 2️⃣ Отправка выигрыша — ИСПРАВЛЕНО
+// 2️⃣ Submit
 app.post('/api/submit', (req, res) => {
   try {
     const { initData, winAmount } = req.body;
     if (!verifyInitData(initData)) {
-      console.warn('❌ Invalid initData on submit');
       return res.status(403).json({ error: 'Неверные данные' });
     }
     if (!Number.isInteger(winAmount) || winAmount <= 0) {
-      console.warn('❌ Invalid winAmount:', winAmount);
       return res.status(400).json({ error: 'Неверная сумма' });
     }
 
     const user = getUserData(initData);
     const today = getTodayUTC();
 
-    // ✅ Выполняем запросы ПО ОТДЕЛЬНОСТИ (лучшая практика для better-sqlite3)
     db.prepare('UPDATE users SET balance = balance + ? WHERE tg_id = ?')
       .run(winAmount, user.id);
     
@@ -115,15 +111,14 @@ app.post('/api/submit', (req, res) => {
     const updatedUser = db.prepare('SELECT balance FROM users WHERE tg_id = ?').get(user.id);
     const updatedScore = db.prepare('SELECT score, wins FROM daily_scores WHERE tg_id = ? AND date = ?').get(user.id, today);
 
-    console.log(`✅ Submit: user ${user.id}, win ${winAmount}`);
     res.json({ balance: updatedUser.balance, score: updatedScore });
   } catch (e) {
-    console.error('❌ /api/submit error:', e);
+    console.error('/api/submit error:', e);
     res.status(500).json({ error: 'Server error: ' + e.message });
   }
 });
 
-// 3️⃣ Лидерборд
+// 3️⃣ Leaderboard
 app.get('/api/leaderboard', (req, res) => {
   try {
     const today = getTodayUTC();
@@ -136,25 +131,26 @@ app.get('/api/leaderboard', (req, res) => {
       LIMIT 20
     `).all(today);
     
-    console.log(`✅ Leaderboard: ${top.length} players`);
     res.json(top);
   } catch (e) {
-    console.error('❌ /api/leaderboard error:', e);
+    console.error('/api/leaderboard error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// 404 handler
+// 404
 app.use((req, res) => {
-  console.warn(`⚠️ 404: ${req.method} ${req.path}`);
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
-// Глобальная обработка ошибок
+// Обработка ошибок
 app.use((err, req, res, next) => {
-  console.error('❌ Unhandled error:', err);
+  console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// 🚀 ЗАПУСК СЕРВЕРА
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Сервер запущен на порту ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Сервер запущен на порту ${PORT}`);
+});
